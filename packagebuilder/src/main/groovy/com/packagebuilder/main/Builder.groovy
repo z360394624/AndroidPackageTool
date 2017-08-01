@@ -14,25 +14,31 @@ import java.util.zip.ZipOutputStream
 
 public class Builder implements Plugin<Project> {
 
-    def final static OS = ['Mac OS X', 'Linux']
+    def final static OS_LINUX = "Linux"
+    def final static OS_MAC = "Mac OS X"
 
     def final static String BUILD_CONFIG_PATH = "buildConfig.properties"
     def final static String KEYSTORE_FILE_PATH = "app/gradle.properties"
     def final static String APK_NAME_PREFIX = "GomePlus-"
     def final static String APK_NAME_SUFFIX = ".apk"
+    def final static String MD5_NAME_SUFFIX = ".md5"
 
     def static channelListPath
     def static sourceAPKPath
     def static tempPath
     def static outputPath
     def static versionCode
+    def static osName
     static {
         def properties = ConfigUtil.getPropertiesFile(BUILD_CONFIG_PATH)
         channelListPath = properties.getProperty("CHANNEL_LIST_PATH")
         sourceAPKPath = properties.getProperty("SOURCE_APK_PATH")
         tempPath = properties.getProperty("TEMP_PATH")
+        FileUtils.checkDirExists(FileUtils.getFileAbsolutePath(tempPath))
         outputPath = properties.getProperty("OUTPUT_PATH")
+        FileUtils.checkDirExists(FileUtils.getFileAbsolutePath(outputPath))
         versionCode = properties.getProperty("VERSION_CODE")
+        osName = System.getProperty("os.name")
     }
 
 
@@ -49,98 +55,22 @@ public class Builder implements Plugin<Project> {
                 def sourceAPKWithChannelId = APK_NAME_PREFIX + it + APK_NAME_SUFFIX
                 // modify apk with channel id
                 println "write ChannelId(" + it + ") to apk"
-//                def unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId)
+                def unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, it)
                 // sign apk
-//                println "sign apk: " + unsignedAPKPath
-//                def signedAPKPath = sign(unsignedAPKPath, it)
-
+                println "sign apk: " + unsignedAPKPath
+                def signedAPKPath = signAPK(unsignedAPKPath, it)
+                // zipalign apk
+                println "zipalign apk: " + signedAPKPath
+                def alignedAPKPath = zipalignAPK(signedAPKPath, it)
                 // calculate apk file md5
-//                println "calcutating apk: " + signedAPKPath + " md5: "
-//                generateApkMD5(signedAPKPath, it)
+                println "calcutating apk: " + alignedAPKPath + " md5: "
+                generateApkMD5(alignedAPKPath, it)
             }
 
-//            def sourceApk = "app/build/outputs/apk/app-release-unsigned.apk"
-//            def signedApkOutputPath = "app/build/outputs/apk"
-//
-//            def apkSource = "../../app/build/outputs/apk/app-release-unsigned"
-//            def apkOutput = "../../app/build/outputs/apk"
-//            def signOutpu = "app/build/outputs/apk"
-//
-//            // 解压apk
-////            unzip(apkSource + ".apk", apkSource);
-//
-//            //指定处理流的编码
-//            channelList.eachLine("UTF-8") {
-//                println it
-//                def unsignedApkFileName = "GomePlus-" + it + ".apk"
-//                def signedApkFileName = "GomePlus-" + it + "-signed.apk"
-//                println unsignedApkFileName
-//                // 修改apk写入渠道号
-//                def modifiedAPKPath = writeChannelId(sourceApk, signedApkOutputPath + "/" + unsignedApkFileName, it)
-//                // 对写入了渠道号的apk签名
-//
-//                // 写入渠道号
-////                loadChannel(apkSource, it)
-//                // 压缩apk
-////                zip(apkSource, apkOutput + "/" + unsignedApkFileName)
-//                // 应用签名
-//                sign(apkOutput + File.separator + signedApkFileName, apkOutput + File.separator + unsignedApkFileName);
-//                // generate md5 of apk file
-//                generateApkMD5(signedApkFileName, it)
-//            }
         }
     }
 
-//    void unzip(String apkPath, String destPath) {
-//        println "start unzip"
-//        def destPathFile = new File(destPath)
-//        if (!destPathFile.exists()) {
-//            destPathFile.mkdirs()
-//        }
-//        def wdir = new File("packagebuilder", "exec").getAbsoluteFile();
-//        def env = System.getenv();
-//        def envlist = [];
-//        env.each() { k, v -> envlist.push("$k=$v") }
-//        def unzipCommand = "./apktool d -f " + apkPath + " -o " + destPath
-//        unzipCommand = ['sh', '-c', unzipCommand]
-//        def sout = new StringBuilder(), serr = new StringBuilder()
-//        def proc = unzipCommand.execute(envlist, wdir)
-//        proc.consumeProcessOutput(sout, serr)
-//        proc.waitFor()
-//        println "out> $sout err> $serr"
-//        println "unzip end"
-//    }
-
-//    void zip(String srcPath, String destFile) {
-//        println "start zip"
-//        def wdir = new File("packagebuilder", "exec").getAbsoluteFile();
-//        def env = System.getenv();
-//        def envlist = [];
-//        env.each() { k, v -> envlist.push("$k=$v") }
-//        def zipCommand = "./apktool b " + srcPath + " -o " + destFile
-//        zipCommand = ['sh', '-c', zipCommand]
-//        println zipCommand
-//        def sout = new StringBuilder(), serr = new StringBuilder()
-//        def proc = zipCommand.execute(envlist, wdir)
-//        proc.consumeProcessOutput(sout, serr)
-//        proc.waitFor()
-//        println "out> $sout err> $serr"
-//        println "zip end"
-//    }
-
-    // 写入渠道号
-//    void loadChannel(String filePath, String channel) {
-//        filePath = "app/build/outputs/apk/app-release-unsigned"
-//        println filePath + ":" + channel
-//        File channelFile = new File(filePath + File.separator + "assets" + File.separator + "channel.txt");
-//        if (channelFile.exists()) channelFile.delete()
-//        def printWriter = channelFile.newPrintWriter()
-//        printWriter.write(channel)
-//        printWriter.flush()
-//        printWriter.close()
-//    }
-
-    String sign(String unsignedAPKPath, String channelId) {
+    String signAPK(String unsignedAPKPath, String channelId) {
         //读取签名配置文件
         def properties = ConfigUtil.getPropertiesFile(KEYSTORE_FILE_PATH)
         def keyStorePath = properties.getProperty("KEY_STORE").toString()
@@ -148,52 +78,47 @@ public class Builder implements Plugin<Project> {
         def aliasName = properties.getProperty("KEY_ALIAS").toString()
         def aliasPassword = properties.getProperty("KEY_ALIAS_PASSWORD").toString()
         println "keyStorePath = " + keyStorePath + ";" + "keyStorePassword = " + keyStorePassword + ";" + "aliasName = " + aliasName + ";" + "aliasPassword = " + aliasPassword + ";"
-        def signedAPKPath = outputPath + File.separator + versionCode + File.separator + APK_NAME_PREFIX + channelId + "-" + "signed" + APK_NAME_SUFFIX
-        def signCommand = new StringBuffer("jarsigner -verbose -keystore ")
-        sign.append(keyStorePath)
-        sign.append(" -storepass ")
-        sign.append(keyStorePassword)
-        sign.append(" -signedjar ")
-        sign.append(signedAPKPath)
-        sign.append(" ")
-        sign.append(unsignedAPKPath)
-        sign.append(" ")
-        sign.append(aliasName)
-        sign.append(" -keypass ")
-        sign.append(aliasPassword)
-        CommandUtil.exec(signCommand, outputPath)
+        def signedAPKPath = FileUtils.getFileAbsolutePath(tempPath) + File.separator + APK_NAME_PREFIX + channelId + "-" + "signed" + APK_NAME_SUFFIX
+//        FileUtils.checkParentExists(checkParentExists)
+        def signCommand = new StringBuffer("jarsigner -keystore ")
+        signCommand.append(keyStorePath)
+        signCommand.append(" -storepass ")
+        signCommand.append(keyStorePassword)
+        signCommand.append(" -signedjar ")
+        signCommand.append(signedAPKPath)
+        signCommand.append(" ")
+        signCommand.append(FileUtils.getFileAbsolutePath(unsignedAPKPath))
+        signCommand.append(" ")
+        signCommand.append(aliasName)
+        signCommand.append(" -keypass ")
+        signCommand.append(aliasPassword)
+        String command = signCommand.toString()
+        println "signAPK ==========" + command
+        exec(command, "/")
         return signedAPKPath
     }
 
-//    void sign(String signedApkName, String unsignedApkName) {
-//        //读取签名配置文件
-//        def properties = ConfigUtil.getPropertiesFile("app/gradle.properties")
-//
-//        def keyStorePath = properties.getProperty("KEY_STORE").toString()
-//        def keyStorePassword = properties.getProperty("KEY_STORE_PASSWORD").toString()
-//        def aliasName = properties.getProperty("KEY_ALIAS").toString()
-//        def aliasPassword = properties.getProperty("KEY_ALIAS_PASSWORD").toString()
-//        println "keyStorePath = " + keyStorePath + ";" + "keyStorePassword = " + keyStorePassword + ";" + "aliasName = " + aliasName + ";" + "aliasPassword = " + aliasPassword + ";"
-//        try {
-//            def wdir = new File("packagebuilder", "exec").getAbsoluteFile();
-//            def env = System.getenv();
-//            def envlist = [];
-//            env.each() { k, v -> envlist.push("$k=$v") }
-//            def signAPK = "jarsigner -verbose -keystore " + keyStorePath + " -storepass " + keyStorePassword + " -signedjar " + signedApkName + " " + unsignedApkName + " " + aliasName + " -keypass " + aliasPassword
-//            signAPK = ['sh', '-c', signAPK]
-//            println signAPK
-//            def sout = new StringBuilder(), serr = new StringBuilder()
-//            def proc = signAPK.execute(envlist, wdir)
-//            println signAPK
-//
-//            def alignAPK = "packagebuilder/exec/zipalign -c -v 4 " + signedApkName + " align-" + signedApkName
-//            println alignAPK
-//            println alignAPK.execute().text
-//        } catch (Exception e) {
-//            e.printStackTrace()
-//        }
-//
-//    }
+    String zipalignAPK(String signedAPKPath, String channelId) {
+        def workDir = new File("packagebuilder", "exec").getAbsolutePath();
+        def zipalignString = getCommand()
+        def alignedAPKPath = FileUtils.getFileAbsolutePath(outputPath) + File.separator + versionCode + File.separator + channelId + File.separator + APK_NAME_PREFIX + channelId + "-final" + APK_NAME_SUFFIX
+        FileUtils.checkOutputDir(alignedAPKPath)
+        zipalignString.append(" -f")
+//        zipalignString.append(" -v")
+        zipalignString.append(" 4 ")
+        zipalignString.append(signedAPKPath)
+        zipalignString.append(" ")
+        zipalignString.append(FileUtils.getFileAbsolutePath(alignedAPKPath))
+        String command = zipalignString.toString()
+        println "zipalign ==========" + command
+        try {
+            exec(command, workDir)
+        } catch (Exception e) {
+        } finally {
+            return alignedAPKPath
+        }
+
+    }
 
     void copy(byte[] buffer, InputStream input, OutputStream output) throws IOException {
         int bytesRead;
@@ -226,15 +151,38 @@ public class Builder implements Plugin<Project> {
     }
 
     void generateApkMD5(String signedAPKPath, String channelId) {
-        def apkPath = "app/build/outputs/apk" + File.separator + apkName
-        def md5FilePath = outputPath + File.separator + channelId
-
-        File md5FileParent = new File(md5FilePath)
-        println apkPath
-        if (md5FileParent.exists()) md5FileParent.delete()
-        else md5FileParent.mkdirs()
-        File md5File = new File(md5FileParent, APK_NAME_PREFIX + channelId + ".md5")
-        MD5Util.generateApkMD5(apkPath, md5File.getAbsolutePath())
+//        def md5FilePath = outputPath + File.separator + versionCode + File.separator + channelId
+        File signedAPK = new File(signedAPKPath)
+        println signedAPK.getParentFile().getAbsolutePath()
+        File md5File = new File(signedAPK.getParentFile(), APK_NAME_PREFIX + channelId + MD5_NAME_SUFFIX)
+        MD5Util.generateApkMD5(signedAPKPath, md5File.getAbsolutePath())
     }
+
+
+    void exec(String command, String execPath) {
+        def wdir = new File(execPath).getAbsoluteFile()
+        def env = System.getenv();
+        def envlist = []
+        env.each() { k, v -> envlist.push("$k=$v") }
+        def sout = new StringBuilder(), serr = new StringBuilder()
+        def proc = command.execute(envlist, wdir)
+        proc.consumeProcessOutput(sout, serr)
+        println proc.text
+        println sout
+        println serr
+    }
+
+    StringBuffer getCommand() {
+        def command;
+        if (osName.startsWith(OS_LINUX)) {
+            command = new StringBuffer("./zipalign-linux")
+        } else if (osName.startsWith(OS_MAC)) {
+            command = new StringBuffer("./zipalign-mac")
+        } else {
+            command = new StringBuffer("")
+        }
+        return command
+    }
+
 }
 
