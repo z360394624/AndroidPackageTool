@@ -1,5 +1,7 @@
-package com.packagebuilder.main;
+package com.packagebuilder.main
 
+import com.packagebuilder.utils.FileUtils
+import com.packagebuilder.utils.MD5Util
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
@@ -41,6 +43,8 @@ public class Builder implements Plugin<Project> {
 //                zip(apkSource, apkOutput + "/" + unsignedApkFileName)
                 // 应用签名
                 sign(apkOutput + File.separator + signedApkFileName, apkOutput + File.separator + unsignedApkFileName);
+                // generate md5 of apk file
+                generateApkMD5(signedApkFileName, it)
             }
         }
     }
@@ -158,6 +162,21 @@ public class Builder implements Plugin<Project> {
         appended.closeEntry()
         apk.close()
         appended.close()
+    }
+
+    void generateApkMD5(String apkName, String channelId) {
+        def apkPath = "app/build/outputs/apk" + File.separator + apkName
+        def md5FilePath  = "app/build/outputs/apk" + File.separator + channelId
+        File md5FileParent = new File(md5FilePath)
+        println apkPath
+        println "1"
+        if (md5FileParent.exists()) md5FileParent.delete()
+        else md5FileParent.mkdirs()
+        println "2"
+        File md5File = new File(md5FileParent, channelId + ".md5")
+        println "3"
+        MD5Util.generateApkMD5(apkPath, md5File.getAbsolutePath())
+        println "4"
     }
 }
 
