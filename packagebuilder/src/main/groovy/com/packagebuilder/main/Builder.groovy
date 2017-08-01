@@ -14,6 +14,8 @@ import java.util.zip.ZipOutputStream
 
 public class Builder implements Plugin<Project> {
 
+    def final static OS = ['Mac OS X', 'Linux']
+
     def final static String BUILD_CONFIG_PATH = "buildConfig.properties"
     def final static String KEYSTORE_FILE_PATH = "app/gradle.properties"
     def final static String APK_NAME_PREFIX = "GomePlus-"
