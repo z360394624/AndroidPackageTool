@@ -23,13 +23,14 @@ public class Builder implements Plugin<Project> {
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
 
-    def static channelListPath
-    def static sourceAPKPath
-    def static tempPath
-    def static outputPath
-    def static versionCode
-    def static osName
-    static {
+    def channelListPath
+    def sourceAPKPath
+    def tempPath
+    def outputPath
+    def versionCode
+    def osName
+
+    void init() {
         def properties = ConfigUtil.getPropertiesFile(BUILD_CONFIG_PATH)
         channelListPath = properties.getProperty("CHANNEL_LIST_PATH")
         sourceAPKPath = properties.getProperty("SOURCE_APK_PATH")
@@ -46,11 +47,14 @@ public class Builder implements Plugin<Project> {
     void apply(Project project) {
         project.task('testTask') << {
 
+            init()
+
             println channelListPath
             File channelListFile = new File(channelListPath)
             //指定处理流的编码
             channelListFile.eachLine("UTF-8") {
                 println System.getProperty("os.name")
+                println "versionCode ======" + versionCode
                 println "Handle Channel: " + it
                 def sourceAPKWithChannelId = APK_NAME_PREFIX + it + APK_NAME_SUFFIX
                 // modify apk with channel id
