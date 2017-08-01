@@ -1,6 +1,5 @@
 package com.packagebuilder.main
 
-import com.packagebuilder.utils.CommandUtil
 import com.packagebuilder.utils.ConfigUtil
 import com.packagebuilder.utils.FileUtils
 import com.packagebuilder.utils.MD5Util
@@ -149,8 +148,8 @@ public class Builder implements Plugin<Project> {
         appended.putNextEntry(e)
         appended.write(channelId.getBytes())
         appended.closeEntry()
-        apk.close()
         appended.close()
+        apk.close()
         return targetPath
     }
 
