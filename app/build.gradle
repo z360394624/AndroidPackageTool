@@ -16,8 +16,8 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
-        releaseUnsigned.initWith(buildTypes.release)
-        releaseUnsigned {
+        releaseBatch.initWith(buildTypes.release)
+        releaseBatch {
             signingConfig null
         }
     }
