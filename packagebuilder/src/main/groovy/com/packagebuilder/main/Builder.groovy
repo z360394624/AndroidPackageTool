@@ -11,7 +11,6 @@ import com.packagebuilder.utils.MD5Util
 import groovy.json.JsonOutput
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.internal.impldep.com.google.gson.Gson
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -46,6 +45,7 @@ public class Builder implements Plugin<Project> {
     def tempPath
     def outputPathChannel
     def outputPathSample
+    def outputPathAll
     def versionCode
     def osName
     def channelList = []
@@ -111,22 +111,12 @@ public class Builder implements Plugin<Project> {
                 mappingFilePath = outputPathSample + File.separator + MAPPING_FILE_NAME
             } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
                 mappingFilePath = outputPathChannel + File.separator + MAPPING_FILE_NAME
+            } else {
+                mappingFilePath = outputPathAll + File.separator + MAPPING_FILE_NAME
             }
-
+            println "mappingFilePath >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> " + mappingFilePath
             def mappingFileContent = new JsonOutput().toJson(apkInfo)
-//            File targetFile = new File(FileUtils.getFileAbsolutePath(mappingFilePath))
-//            targetFile.createNewFile()
-//            println "write mapping file>>>>>>>>>>>> " + targetFile.getAbsolutePath()
-//            def printWriter = targetFile.newPrintWriter()
-//            printWriter.write(mappingFileContent)
-//            printWriter.flush()
-//            printWriter.close()
-
             FileUtils.writeFileStr(mappingFilePath, mappingFileContent)
-//            else {
-//                mappingFilePath = outputPathChannel
-//            }
-
         }
     }
 
@@ -169,6 +159,9 @@ public class Builder implements Plugin<Project> {
         // sample输出路径初始化
         outputPathSample = project.buildConfig.outputPathS + versionCode
         FileUtils.checkDirExistsIfCreate(outputPathSample)
+        // 全量包输出路径
+        outputPathAll = project.buildConfig.outputPathA + versionCode
+        FileUtils.checkDirExistsIfCreate(outputPathAll)
         /** 检查未签名的apk是否存在 */
         sourceAPKPath = project.buildConfig.sourceAPKPath
         if (!FileUtils.checkFileExists(sourceAPKPath)) {
@@ -187,6 +180,7 @@ public class Builder implements Plugin<Project> {
         println "sampleList路径>>>" + sampleListPath
         println "outputPathChannel>>>>>>" + outputPathChannel
         println "outputPathSample>>>>>>" + outputPathSample
+        println "outputPathAll>>>>>>" + outputPathAll
         println "=============================================="
     }
 
@@ -226,15 +220,18 @@ public class Builder implements Plugin<Project> {
         String command = signCommand.toString()
         println "signAPK ==========" + command
         exec(command, "/")
+//        exec(command, "/Users/luciuszhang/development/workspaces/myapp/AndroidPackageDemo/packagebuilder/exec")
         return signedAPKPath
     }
 
     String zipalignAPK(String signedAPKPath, String channelId) {
         def targetPath
-        if (sampleList.contains(channelId)) {
+        if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
             targetPath = FileUtils.getFileAbsolutePath(outputPathSample)
-        } else if (channelList.contains(channelId)) {
+        } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
             targetPath = FileUtils.getFileAbsolutePath(outputPathChannel)
+        } else {
+            targetPath = FileUtils.getFileAbsolutePath(outputPathAll)
         }
         def workDir = new File("packagebuilder", "exec").getAbsolutePath();
         def zipalignString = getCommand()

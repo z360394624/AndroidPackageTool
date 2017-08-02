@@ -17,6 +17,7 @@ public class BuildConfigPluginExtension {
     def tempPath = "app/build/temp"
     def outputPathC = "output/channel/"
     def outputPathS = "output/sample/"
+    def outputPathA = "output/all/"
 
 
 
