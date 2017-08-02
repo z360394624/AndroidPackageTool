@@ -35,13 +35,17 @@ public class MD5Util {
     }
 
     /** calculate md5 of APK file， save md5 as string to file */
-    static void generateApkMD5(String apkPath, String md5FilePath) {
+    static String generateApkMD5(String apkPath, String md5FilePath) {
         File md5File = new File(md5FilePath)
         if (md5File.exists()) {
             md5File.delete()
         }
         md5File.createNewFile()
         String md5Str = md5sum(apkPath)
-        FileUtils.writeFileStr(md5FilePath, md5Str)
+        def printWriter = md5File.newPrintWriter()
+        printWriter.write(md5Str)
+        printWriter.flush()
+        printWriter.close()
+        return md5Str
     }
 }

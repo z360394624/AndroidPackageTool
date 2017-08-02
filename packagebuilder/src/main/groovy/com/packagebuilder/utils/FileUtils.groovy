@@ -12,12 +12,27 @@ public class FileUtils {
         printWriter.close()
     }
 
-    static void checkDirExists(String path) {
+    /** 校验目录是否存在，不存在则创建 */
+    static void checkDirExistsIfCreate(String path) {
         File file = new File(path)
-        if (file.exists()) {
-            file.delete()
+        if (!file.exists()) {
+            file.mkdirs()
         }
-        file.mkdirs()
+    }
+
+    /** 校验文件是否存在，不存在则创建 */
+    static void checkFileExistsIfCreate(String path) {
+        File file = new File(path)
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs()
+        }
+        if (!file.exists()) {
+            file.createNewFile()
+        }
+    }
+
+    static boolean checkFileExists(String path) {
+        return new File(path).exists()
     }
 
     static void checkParentExists(String filePath) {

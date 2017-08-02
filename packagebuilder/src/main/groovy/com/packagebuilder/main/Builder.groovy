@@ -1,10 +1,17 @@
 package com.packagebuilder.main
 
+import com.packagebuilder.BuildConfigPluginExtension
+import com.packagebuilder.bean.APKInfo
+import com.packagebuilder.bean.ChannelInfo
+import com.packagebuilder.bean.PackageInfo
+import com.packagebuilder.bean.VersionInfo
 import com.packagebuilder.utils.ConfigUtil
 import com.packagebuilder.utils.FileUtils
 import com.packagebuilder.utils.MD5Util
+import groovy.json.JsonOutput
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.internal.impldep.com.google.gson.Gson
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -13,63 +20,185 @@ import java.util.zip.ZipOutputStream
 
 public class Builder implements Plugin<Project> {
 
-    def final static OS_LINUX = "Linux"
-    def final static OS_MAC = "Mac OS X"
+    def final static APK_FILE_NOT_FOUND = "APK文件未找到，打包失败"
+    def final static VERSION_CODE_IS_EMPTY = "版本号不能为空"
+    def final static BUILD_TYPE_ERROR = "打包类型只能为：" +
+            "${BuildConfigPluginExtension.BUILT_TYPE_ALL}、" +
+            "${BuildConfigPluginExtension.BUILT_TYPE_SAMPLE}、" +
+            "${BuildConfigPluginExtension.BUILT_TYPE_CHANNEL}"
 
-    def final static String BUILD_CONFIG_PATH = "buildConfig.properties"
     def final static String KEYSTORE_FILE_PATH = "app/gradle.properties"
     def final static String APK_NAME_PREFIX = "GomePlus-"
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
+    def final static String MAPPING_FILE_NAME = "gome.txt"
+    def final static TASK_NAME = "buildAPK"
+    def final static ENCODE_STR = "UTF-8"
 
+    def final static OS_LINUX = "Linux"
+    def final static OS_MAC = "Mac OS X"
+
+
+    def configBuildPath
     def channelListPath
+    def sampleListPath
     def sourceAPKPath
     def tempPath
-    def outputPath
+    def outputPathChannel
+    def outputPathSample
     def versionCode
     def osName
+    def channelList = []
+    def sampleList = []
+    def totalList = []
+    def buildType
 
-    void init() {
-        def properties = ConfigUtil.getPropertiesFile(BUILD_CONFIG_PATH)
-        channelListPath = properties.getProperty("CHANNEL_LIST_PATH")
-        sourceAPKPath = properties.getProperty("SOURCE_APK_PATH")
-        tempPath = properties.getProperty("TEMP_PATH")
-        FileUtils.checkDirExists(FileUtils.getFileAbsolutePath(tempPath))
-        outputPath = properties.getProperty("OUTPUT_PATH")
-        FileUtils.checkDirExists(FileUtils.getFileAbsolutePath(outputPath))
-        versionCode = properties.getProperty("VERSION_CODE")
-        osName = System.getProperty("os.name")
-    }
 
+    APKInfo apkInfo = new APKInfo()
 
     @Override
     void apply(Project project) {
-        project.task('testTask') << {
-
-            init()
-
-            println channelListPath
+        /** 初始化插件，在打包前开始执行 */
+        initPlugin(project)
+        /** 创建打包的task */
+        project.task(TASK_NAME) << {
+            /** 初始化task*/
+            initTask(project)
+            /** 加载sampleListList渠道号 */
+            File sampleListFile = new File(sampleListPath)
+            /** 加载channelList渠道号 */
             File channelListFile = new File(channelListPath)
-            //指定处理流的编码
-            channelListFile.eachLine("UTF-8") {
-                println System.getProperty("os.name")
-                println "versionCode ======" + versionCode
-                println "Handle Channel: " + it
-                def sourceAPKWithChannelId = APK_NAME_PREFIX + it + APK_NAME_SUFFIX
+            sampleListFile.eachLine(ENCODE_STR) {
+                sampleList.add(it)
+                totalList.add(it)
+            }
+            channelListFile.eachLine(ENCODE_STR) {
+                channelList.add(it)
+                totalList.add(it)
+            }
+            println ""
+            /** 获取目标打包列表 */
+            def targetList = getTargetChannelList()
+            ArrayList channelList = new ArrayList()
+            for (channelId in targetList) {
+                println "start handle channelId " + channelId + ">>>>>>>>>>>>>>>>>>>>>"
+                def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
                 // modify apk with channel id
-                println "write ChannelId(" + it + ") to apk"
-                def unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, it)
+                println "start write channel id"
+                def unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
                 // sign apk
-                println "sign apk: " + unsignedAPKPath
-                def signedAPKPath = signAPK(unsignedAPKPath, it)
+                println "start sign apk"
+                def signedAPKPath = signAPK(unsignedAPKPath, channelId)
                 // zipalign apk
-                println "zipalign apk: " + signedAPKPath
-                def alignedAPKPath = zipalignAPK(signedAPKPath, it)
+                println "start zipalign apk"
+                def alignedAPKPath = zipalignAPK(signedAPKPath, channelId)
                 // calculate apk file md5
-                println "calcutating apk: " + alignedAPKPath + " md5: "
-                generateApkMD5(alignedAPKPath, it)
+                println "start calculate apk md5"
+                def md5Str = generateApkMD5(alignedAPKPath, channelId)
+
+                channelList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
+            }
+            VersionInfo versionInfo = new VersionInfo()
+            versionInfo.setVersionCode("${versionCode}")
+            versionInfo.setChannelList(channelList)
+
+            ArrayList versionList = new ArrayList()
+            versionList.add(versionInfo)
+            apkInfo.setVersion("${versionCode}")
+            apkInfo.setVersionList(versionList)
+            def mappingFilePath
+            if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
+                mappingFilePath = outputPathSample + File.separator + MAPPING_FILE_NAME
+            } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
+                mappingFilePath = outputPathChannel + File.separator + MAPPING_FILE_NAME
             }
 
+            def mappingFileContent = new JsonOutput().toJson(apkInfo)
+//            File targetFile = new File(FileUtils.getFileAbsolutePath(mappingFilePath))
+//            targetFile.createNewFile()
+//            println "write mapping file>>>>>>>>>>>> " + targetFile.getAbsolutePath()
+//            def printWriter = targetFile.newPrintWriter()
+//            printWriter.write(mappingFileContent)
+//            printWriter.flush()
+//            printWriter.close()
+
+            FileUtils.writeFileStr(mappingFilePath, mappingFileContent)
+//            else {
+//                mappingFilePath = outputPathChannel
+//            }
+
+        }
+    }
+
+    /** 初始化插件操作 */
+    void initPlugin(Project project) {
+        // 读取gradle中参数配置文件
+        project.extensions.create("buildConfig", BuildConfigPluginExtension)
+        // 参数文件位置初始化
+        configBuildPath = project.buildConfig.configFilePath
+        FileUtils.checkDirExistsIfCreate(configBuildPath)
+        // 缓存路径初始化
+        tempPath = project.buildConfig.tempPath
+        FileUtils.checkDirExistsIfCreate(tempPath)
+        // 渠道号channelList文件初始化
+        channelListPath = project.buildConfig.channelListPath
+        FileUtils.checkFileExistsIfCreate(channelListPath)
+        // 渠道号sampleList文件初始化
+        sampleListPath = project.buildConfig.sampleListPath
+        FileUtils.checkFileExistsIfCreate(sampleListPath)
+        println "=================================================="
+        println "configBuildPath>>>>>>" + configBuildPath
+        println "configBuildPath>>>>>>" + configBuildPath
+        println "outputPathChannel>>>>>>" + outputPathChannel
+        println "outputPathSample>>>>>>" + outputPathSample
+        println "tempPath>>>>>>" + tempPath
+        println "=================================================="
+    }
+
+    /** 初始化task，检测必要参数 */
+    void initTask(Project project) {
+        // 取版本号
+        versionCode = project.buildConfig.versionCode
+        /** 检查版本号是否为空 */
+        if (versionCode == 0) {
+            throw new IllegalArgumentException(VERSION_CODE_IS_EMPTY)
+        }
+        // channel输出路径初始化
+        outputPathChannel = project.buildConfig.outputPathC + versionCode
+        FileUtils.checkDirExistsIfCreate(outputPathChannel)
+        // sample输出路径初始化
+        outputPathSample = project.buildConfig.outputPathS + versionCode
+        FileUtils.checkDirExistsIfCreate(outputPathSample)
+        /** 检查未签名的apk是否存在 */
+        sourceAPKPath = project.buildConfig.sourceAPKPath
+        if (!FileUtils.checkFileExists(sourceAPKPath)) {
+            throw new FileNotFoundException(APK_FILE_NOT_FOUND)
+        }
+        /** 读取打包类型，默认为sample */
+        buildType = project.buildConfig.buildType
+        /** 读取当前操作系统类型 */
+        osName = System.getProperty("os.name")
+        println "=============================================="
+        println "源apk路径>>>" + sourceAPKPath
+        println "版本号>>>" + versionCode
+        println "操作系统版本>>>" + osName
+        println "打包类型>>>" + buildType
+        println "channelList路径>>>" + channelListPath
+        println "sampleList路径>>>" + sampleListPath
+        println "outputPathChannel>>>>>>" + outputPathChannel
+        println "outputPathSample>>>>>>" + outputPathSample
+        println "=============================================="
+    }
+
+    List getTargetChannelList() {
+        if (buildType == BuildConfigPluginExtension.BUILT_TYPE_ALL) {
+            return totalList
+        } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
+            return channelList
+        } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
+            return sampleList
+        } else {
+            throw new IllegalArgumentException(BUILD_TYPE_ERROR)
         }
     }
 
@@ -82,7 +211,6 @@ public class Builder implements Plugin<Project> {
         def aliasPassword = properties.getProperty("KEY_ALIAS_PASSWORD").toString()
         println "keyStorePath = " + keyStorePath + ";" + "keyStorePassword = " + keyStorePassword + ";" + "aliasName = " + aliasName + ";" + "aliasPassword = " + aliasPassword + ";"
         def signedAPKPath = FileUtils.getFileAbsolutePath(tempPath) + File.separator + APK_NAME_PREFIX + channelId + "-" + "signed" + APK_NAME_SUFFIX
-//        FileUtils.checkParentExists(checkParentExists)
         def signCommand = new StringBuffer("jarsigner -keystore ")
         signCommand.append(keyStorePath)
         signCommand.append(" -storepass ")
@@ -102,11 +230,16 @@ public class Builder implements Plugin<Project> {
     }
 
     String zipalignAPK(String signedAPKPath, String channelId) {
+        def targetPath
+        if (sampleList.contains(channelId)) {
+            targetPath = FileUtils.getFileAbsolutePath(outputPathSample)
+        } else if (channelList.contains(channelId)) {
+            targetPath = FileUtils.getFileAbsolutePath(outputPathChannel)
+        }
         def workDir = new File("packagebuilder", "exec").getAbsolutePath();
         def zipalignString = getCommand()
-        def alignedAPKPath = FileUtils.getFileAbsolutePath(outputPath) + File.separator + versionCode + File.separator + channelId + File.separator + APK_NAME_PREFIX + channelId + "-final" + APK_NAME_SUFFIX
-        FileUtils.checkOutputDir(alignedAPKPath)
-        zipalignString.append(" -f")
+        def alignedAPKPath = getOutputAPKPath(targetPath, channelId, "-final")
+//        zipalignString.append(" -f")
 //        zipalignString.append(" -v")
         zipalignString.append(" 4 ")
         zipalignString.append(signedAPKPath)
@@ -114,13 +247,8 @@ public class Builder implements Plugin<Project> {
         zipalignString.append(FileUtils.getFileAbsolutePath(alignedAPKPath))
         String command = zipalignString.toString()
         println "zipalign ==========" + command
-        try {
-            exec(command, workDir)
-        } catch (Exception e) {
-        } finally {
-            return alignedAPKPath
-        }
-
+        exec(command, workDir)
+        return alignedAPKPath
     }
 
     void copy(byte[] buffer, InputStream input, OutputStream output) throws IOException {
@@ -142,8 +270,8 @@ public class Builder implements Plugin<Project> {
             if (!e.isDirectory()) {
                 copy(BUFFER, apk.getInputStream(e), appended)
             }
-            appended.closeEntry()
         }
+
         ZipEntry e = new ZipEntry("assets/channel.txt")
         appended.putNextEntry(e)
         appended.write(channelId.getBytes())
@@ -153,15 +281,13 @@ public class Builder implements Plugin<Project> {
         return targetPath
     }
 
-    void generateApkMD5(String signedAPKPath, String channelId) {
-//        def md5FilePath = outputPath + File.separator + versionCode + File.separator + channelId
+    String generateApkMD5(String signedAPKPath, String channelId) {
         File signedAPK = new File(signedAPKPath)
-        println signedAPK.getParentFile().getAbsolutePath()
         File md5File = new File(signedAPK.getParentFile(), APK_NAME_PREFIX + channelId + MD5_NAME_SUFFIX)
-        MD5Util.generateApkMD5(signedAPKPath, md5File.getAbsolutePath())
+        return MD5Util.generateApkMD5(signedAPKPath, md5File.getAbsolutePath())
     }
 
-
+    /** 执行命令行 */
     void exec(String command, String execPath) {
         def wdir = new File(execPath).getAbsoluteFile()
         def env = System.getenv();
@@ -169,8 +295,7 @@ public class Builder implements Plugin<Project> {
         env.each() { k, v -> envlist.push("$k=$v") }
         def sout = new StringBuilder(), serr = new StringBuilder()
         def proc = command.execute(envlist, wdir)
-        proc.consumeProcessOutput(sout, serr)
-        println proc.text
+        proc.waitFor()
         println sout
         println serr
     }
@@ -185,6 +310,25 @@ public class Builder implements Plugin<Project> {
             command = new StringBuffer("")
         }
         return command
+    }
+
+
+    String getOutputAPKPath(String pathPrefix, String channelId, String subfix) {
+        def targetFile = new File(pathPrefix + File.separator + channelId + File.separator)
+        if (!targetFile.exists()) {
+            targetFile.mkdirs()
+        }
+        return targetFile.getAbsolutePath() + File.separator + APK_NAME_PREFIX + channelId + subfix + APK_NAME_SUFFIX
+    }
+
+    ChannelInfo generateChannelInfo(String apkPath, String versionCode, String channelId, String md5Str) {
+        PackageInfo packageInfo = new PackageInfo()
+        packageInfo.setMd5(md5Str)
+        packageInfo.setApk("/${versionCode}/${channelId}/${new File(apkPath).getName()}")
+        ChannelInfo channelInfo = new ChannelInfo()
+        channelInfo.setChannelName(channelId)
+        channelInfo.setInfo(packageInfo)
+        return channelInfo
     }
 
 }

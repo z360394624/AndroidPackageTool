@@ -2,6 +2,7 @@ apply plugin: 'groovy'
 apply plugin: 'maven'
 
 dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
     compile gradleApi()
     compile localGroovy()
 }

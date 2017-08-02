@@ -48,7 +48,9 @@ buildscript {
         classpath 'com.packagebuilder.main:packagebuilder:1.0.0'
     }
 }
-
 apply plugin: 'package.builder'
-
-build.finalizedBy(testTask)
+build.finalizedBy(buildAPK)
+buildConfig {
+    versionCode 900
+    buildType 'channel'
+}
