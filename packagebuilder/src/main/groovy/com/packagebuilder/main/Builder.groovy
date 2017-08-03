@@ -62,7 +62,7 @@ public class Builder implements Plugin<Project> {
         // 读取gradle中参数配置文件
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
-        project.task(TASK_NAME) << {
+        project.task(TASK_NAME).doLast {
             /** 初始化task*/
             initTask(project)
             /** 加载sampleListList渠道号 */
@@ -296,7 +296,7 @@ public class Builder implements Plugin<Project> {
         } else if (osName.startsWith(OS_MAC)) {
             command = new StringBuffer("./zipalign-mac")
         } else {
-            command = new StringBuffer("packagebuilder／exec／zipalign.exe")
+            command = new StringBuffer("packagebuilder/exec/zipalign.exe")
         }
         return command
     }
