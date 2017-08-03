@@ -59,8 +59,8 @@ public class Builder implements Plugin<Project> {
 
     @Override
     void apply(Project project) {
-        /** 初始化插件，在打包前开始执行 */
-        initPlugin(project)
+        // 读取gradle中参数配置文件
+        project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
         project.task(TASK_NAME) << {
             /** 初始化task*/
@@ -121,34 +121,24 @@ public class Builder implements Plugin<Project> {
         }
     }
 
-    /** 初始化插件操作 */
-    void initPlugin(Project project) {
-        // 读取gradle中参数配置文件
-        project.extensions.create("buildConfig", BuildConfigPluginExtension)
-        // keyStore路径初始化
-        keyStorePropertiesPath = project.buildConfig.keyStorePropertiesPath
-        FileUtils.checkDirExists(keyStorePropertiesPath)
+    /** 初始化task，检测必要参数 */
+    void initTask(Project project) {
+
         // 参数文件位置初始化
         configBuildPath = project.buildConfig.configFilePath
         FileUtils.checkDirExistsIfCreate(configBuildPath)
-        // 缓存路径初始化
-        tempPath = project.buildConfig.tempPath
-        FileUtils.checkDirExistsIfCreate(tempPath)
         // 渠道号channelList文件初始化
         channelListPath = project.buildConfig.channelListPath
         FileUtils.checkFileExistsIfCreate(channelListPath)
         // 渠道号sampleList文件初始化
         sampleListPath = project.buildConfig.sampleListPath
         FileUtils.checkFileExistsIfCreate(sampleListPath)
-        println "=================================================="
-        println "configBuildPath>>>>>>" + configBuildPath
-        println "configBuildPath>>>>>>" + configBuildPath
-        println "tempPath>>>>>>" + tempPath
-        println "=================================================="
-    }
-
-    /** 初始化task，检测必要参数 */
-    void initTask(Project project) {
+        // 缓存路径初始化
+        tempPath = project.buildConfig.tempPath
+        FileUtils.checkDirExistsIfCreate(tempPath)
+        // keyStore路径初始化
+        keyStorePropertiesPath = project.buildConfig.keyStorePropertiesPath
+        FileUtils.checkFileExists(keyStorePropertiesPath)
         // 取版本号
         versionCode = project.buildConfig.versionCode
         /** 检查版本号是否为空 */
@@ -174,6 +164,7 @@ public class Builder implements Plugin<Project> {
         /** 读取当前操作系统类型 */
         osName = System.getProperty("os.name")
         println "=============================================="
+        println "keyStore配置路径>>>" + keyStorePropertiesPath
         println "源apk路径>>>" + sourceAPKPath
         println "版本号>>>" + versionCode
         println "操作系统版本>>>" + osName
@@ -305,7 +296,7 @@ public class Builder implements Plugin<Project> {
         } else if (osName.startsWith(OS_MAC)) {
             command = new StringBuffer("./zipalign-mac")
         } else {
-            command = new StringBuffer("")
+            command = new StringBuffer("packagebuilder／exec／zipalign.exe")
         }
         return command
     }
