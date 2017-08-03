@@ -11,6 +11,7 @@ public class BuildConfigPluginExtension {
     def versionCode = 0
     def buildType = BUILT_TYPE_SAMPLE
 
+    def keyStorePropertiesPath = "app/gradle.properties"
     def configFilePath = "builderConfig"
     def channelListPath = "builderConfig/channelList.txt"
     def sampleListPath = "builderConfig/sampleList.txt"

@@ -26,7 +26,6 @@ public class Builder implements Plugin<Project> {
             "${BuildConfigPluginExtension.BUILT_TYPE_SAMPLE}、" +
             "${BuildConfigPluginExtension.BUILT_TYPE_CHANNEL}"
 
-    def final static String KEYSTORE_FILE_PATH = "app/gradle.properties"
     def final static String APK_NAME_PREFIX = "GomePlus-"
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
@@ -38,6 +37,8 @@ public class Builder implements Plugin<Project> {
     def final static OS_MAC = "Mac OS X"
 
 
+
+    def keyStorePropertiesPath
     def configBuildPath
     def channelListPath
     def sampleListPath
@@ -124,6 +125,9 @@ public class Builder implements Plugin<Project> {
     void initPlugin(Project project) {
         // 读取gradle中参数配置文件
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
+        // keyStore路径初始化
+        keyStorePropertiesPath = project.buildConfig.keyStorePropertiesPath
+        FileUtils.checkDirExists(keyStorePropertiesPath)
         // 参数文件位置初始化
         configBuildPath = project.buildConfig.configFilePath
         FileUtils.checkDirExistsIfCreate(configBuildPath)
@@ -139,8 +143,6 @@ public class Builder implements Plugin<Project> {
         println "=================================================="
         println "configBuildPath>>>>>>" + configBuildPath
         println "configBuildPath>>>>>>" + configBuildPath
-        println "outputPathChannel>>>>>>" + outputPathChannel
-        println "outputPathSample>>>>>>" + outputPathSample
         println "tempPath>>>>>>" + tempPath
         println "=================================================="
     }
@@ -198,7 +200,7 @@ public class Builder implements Plugin<Project> {
 
     String signAPK(String unsignedAPKPath, String channelId) {
         //读取签名配置文件
-        def properties = ConfigUtil.getPropertiesFile(KEYSTORE_FILE_PATH)
+        def properties = ConfigUtil.getPropertiesFile(keyStorePropertiesPath)
         def keyStorePath = properties.getProperty("KEY_STORE").toString()
         def keyStorePassword = properties.getProperty("KEY_STORE_PASSWORD").toString()
         def aliasName = properties.getProperty("KEY_ALIAS").toString()
@@ -220,7 +222,6 @@ public class Builder implements Plugin<Project> {
         String command = signCommand.toString()
         println "signAPK ==========" + command
         exec(command, "/")
-//        exec(command, "/Users/luciuszhang/development/workspaces/myapp/AndroidPackageDemo/packagebuilder/exec")
         return signedAPKPath
     }
 

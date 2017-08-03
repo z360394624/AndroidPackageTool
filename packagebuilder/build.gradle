@@ -19,7 +19,7 @@ uploadArchives {
         mavenDeployer {
 //            repository(url: uri('../repo'))
             repository(url: "http://10.69.58.111:8081/repository/3rd_part/") {
-                authentication(userName: "admin", password: "admin123")
+                authentication(userName: "admin", password: "z529905310")
             }
         }
     }
