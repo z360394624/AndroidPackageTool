@@ -1,4 +1,4 @@
-package com.packagebuilder
+package com.builder
 
 
 public class BuildConfigPluginExtension {

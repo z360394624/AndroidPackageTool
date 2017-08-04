@@ -1,4 +1,4 @@
-package com.packagebuilder.utils;
+package com.builder.utils;
 
 public class FileUtils {
 

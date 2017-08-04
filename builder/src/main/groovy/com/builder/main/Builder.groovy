@@ -1,13 +1,13 @@
-package com.packagebuilder.main
+package com.builder.main
 
-import com.packagebuilder.BuildConfigPluginExtension
-import com.packagebuilder.bean.APKInfo
-import com.packagebuilder.bean.ChannelInfo
-import com.packagebuilder.bean.PackageInfo
-import com.packagebuilder.bean.VersionInfo
-import com.packagebuilder.utils.ConfigUtil
-import com.packagebuilder.utils.FileUtils
-import com.packagebuilder.utils.MD5Util
+import com.builder.BuildConfigPluginExtension
+import com.builder.bean.APKInfo
+import com.builder.bean.ChannelInfo
+import com.builder.bean.PackageInfo
+import com.builder.bean.VersionInfo
+import com.builder.utils.ConfigUtil
+import com.builder.utils.FileUtils
+import com.builder.utils.MD5Util
 import groovy.json.JsonOutput
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -225,7 +225,7 @@ public class Builder implements Plugin<Project> {
         } else {
             targetPath = FileUtils.getFileAbsolutePath(outputPathAll)
         }
-        def workDir = new File("packagebuilder", "exec").getAbsolutePath();
+        def workDir = new File("builder", "exec").getAbsolutePath();
         def zipalignString = getCommand()
         def alignedAPKPath = getOutputAPKPath(targetPath, channelId, "-final")
 //        zipalignString.append(" -f")
@@ -296,7 +296,7 @@ public class Builder implements Plugin<Project> {
         } else if (osName.startsWith(OS_MAC)) {
             command = new StringBuffer("./zipalign-mac")
         } else {
-            command = new StringBuffer("packagebuilder/exec/zipalign.exe")
+            command = new StringBuffer("builder/exec/zipalign.exe")
         }
         return command
     }

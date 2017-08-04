@@ -1,10 +1,10 @@
-package com.packagebuilder.bean
+package com.builder.bean
 
 public class ChannelInfo {
 
     String channelName
 
-    PackageInfo info
+    com.builder.bean.PackageInfo info
 
     String getChannelName() {
         return channelName
@@ -14,11 +14,11 @@ public class ChannelInfo {
         this.channelName = channelName
     }
 
-    PackageInfo getInfo() {
+    com.builder.bean.PackageInfo getInfo() {
         return info
     }
 
-    void setInfo(PackageInfo info) {
+    void setInfo(com.builder.bean.PackageInfo info) {
         this.info = info
     }
 }

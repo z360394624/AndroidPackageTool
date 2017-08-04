@@ -1,4 +1,4 @@
-package com.packagebuilder.bean
+package com.builder.bean
 
 public class APKInfo {
 
