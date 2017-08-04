@@ -4,9 +4,9 @@ A android package plugin by groovy, Read channelId from channelList.txt, write i
 
 
 
-当前模式需要讲整个插件module在本地编译，因为插件件模块下的exec目录下的zipalign无法被打包进aar中，后继会采用gradle的task来执行zipalign。
+当前模式需要讲整个插件module在本地编译，因为插件件模块下的exec目录下的zipalign无法被打包进aar中，后继会采用gradle的task来执行zipalign。
 ## 使用方式：
-    1.将打包插件module（builder）导入到本地项目，在保证编译环境的情况下，执行./gradlew uploadArchives构建插件；
+    1.将打包插件module（builder）导入到本地项目，在保证编译环境的情况下，执行./gradlew uploadArchives构建插件；
 
     2.在项目主module的gradle文件末尾添加如附录配置；
 
@@ -14,7 +14,7 @@ A android package plugin by groovy, Read channelId from channelList.txt, write i
 
 
 
-<font color=red><h1>附录</h1></font>
+<font color=red><h1>附录</h1></font>
 
 
     buildscript {
@@ -55,9 +55,9 @@ A android package plugin by groovy, Read channelId from channelList.txt, write i
 - <font color=red>暂不支持上传到maven私服，因为zipalign没有打包进插件module的aar中；</font>
 - <font color=red>channelList.txt和sampleList.txt的格式如下：（每行一个渠道号）</font>
 
-    C000
-    C111
-    C222
+    C000    
+    C111    
+    C222    
 
 
 
