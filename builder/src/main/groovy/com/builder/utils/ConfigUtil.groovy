@@ -6,7 +6,7 @@ public class ConfigUtil {
     static Properties getPropertiesFile(String propertiesPath) {
         def properties = new Properties()
         def propertiesFile = new File(propertiesPath)
-        if (FileUtils.checkFileExists(propertiesPath)) {
+        if (propertiesFile.existsss) {
             throw new FileNotFoundException(propertiesPath + " not found!")
         }
         propertiesFile.withInputStream {
