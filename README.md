@@ -2,6 +2,7 @@
 
 A android package plugin by groovy, Read channelId from channelList.txt, write into assets/channel.txt
 
+原理概述：无解压直接修改apk文件，将渠道号写入apk，然后签名，最后执行zipalign操作    
 
 
 当前模式需要讲整个插件module在本地编译，因为插件件模块下的exec目录下的zipalign无法被打包进aar中，后继会采用gradle的task来执行zipalign。
