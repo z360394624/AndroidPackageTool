@@ -196,7 +196,7 @@ public class Builder implements Plugin<Project> {
         def keyStorePassword = properties.getProperty("KEY_STORE_PASSWORD").toString()
         def aliasName = properties.getProperty("KEY_ALIAS").toString()
         def aliasPassword = properties.getProperty("KEY_ALIAS_PASSWORD").toString()
-        if (FileUtils.checkFileExists(keyStorePath)) {
+        if (!FileUtils.checkFileExists(keyStorePath)) {
             throw new FileNotFoundException("keyStore not found")
         }
         println "keyStorePath = " + keyStorePath + ";" + "keyStorePassword = " + keyStorePassword + ";" + "aliasName = " + aliasName + ";" + "aliasPassword = " + aliasPassword + ";"
