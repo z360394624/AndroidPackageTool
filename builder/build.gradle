@@ -2,9 +2,10 @@ apply plugin: 'groovy'
 apply plugin: 'maven'
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
     compile gradleApi()
     compile localGroovy()
+    compile fileTree(include: ['*.jar'], dir: 'libs')
+    compile 'com.android.tools.build:gradle:2.3.3'
 }
 
 repositories {
@@ -12,7 +13,7 @@ repositories {
 }
 
 group='com.builder.main'
-version='1.0.4'
+version='1.0.7'
 
 uploadArchives {
     repositories {

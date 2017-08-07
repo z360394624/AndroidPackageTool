@@ -1,5 +1,6 @@
 package com.builder.main
 
+import com.android.build.gradle.AppExtension
 import com.builder.BuildConfigPluginExtension
 import com.builder.bean.APKInfo
 import com.builder.bean.ChannelInfo
@@ -9,13 +10,14 @@ import com.builder.utils.ConfigUtil
 import com.builder.utils.FileUtils
 import com.builder.utils.MD5Util
 import groovy.json.JsonOutput
+import org.gradle.api.Action
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.process.ExecSpec
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
-
 
 public class Builder implements Plugin<Project> {
 
@@ -36,6 +38,7 @@ public class Builder implements Plugin<Project> {
     def final static OS_LINUX = "Linux"
     def final static OS_MAC = "Mac OS X"
 
+    Project project;
 
 
     def keyStorePropertiesPath
@@ -58,11 +61,13 @@ public class Builder implements Plugin<Project> {
     APKInfo apkInfo = new APKInfo()
 
     @Override
-    void apply(Project project) {
+    void apply(Project pro) {
+        project = pro
         // 读取gradle中参数配置文件
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
         project.task(TASK_NAME).doLast {
+            println "end ex"
             /** 初始化task*/
             initTask(project)
             /** 加载sampleListList渠道号 */
@@ -77,9 +82,9 @@ public class Builder implements Plugin<Project> {
                 channelList.add(it)
                 totalList.add(it)
             }
-            println ""
             /** 获取目标打包列表 */
             def targetList = getTargetChannelList()
+            // 渠道包信息bean
             ArrayList channelList = new ArrayList()
             for (channelId in targetList) {
                 println "start handle channelId " + channelId + ">>>>>>>>>>>>>>>>>>>>>"
@@ -92,7 +97,7 @@ public class Builder implements Plugin<Project> {
                 def signedAPKPath = signAPK(unsignedAPKPath, channelId)
                 // zipalign apk
                 println "start zipalign apk"
-                def alignedAPKPath = zipalignAPK(signedAPKPath, channelId)
+                def alignedAPKPath = execZipAlign(signedAPKPath, channelId)
                 // calculate apk file md5
                 println "start calculate apk md5"
                 def md5Str = generateApkMD5(alignedAPKPath, channelId)
@@ -123,7 +128,6 @@ public class Builder implements Plugin<Project> {
 
     /** 初始化task，检测必要参数 */
     void initTask(Project project) {
-
         // 参数文件位置初始化
         configBuildPath = project.buildConfig.configFilePath
         FileUtils.checkDirExistsIfCreate(configBuildPath)
@@ -177,6 +181,7 @@ public class Builder implements Plugin<Project> {
         println "=============================================="
     }
 
+    /** 根据打包类型 */
     List getTargetChannelList() {
         if (buildType == BuildConfigPluginExtension.BUILT_TYPE_ALL) {
             return totalList
@@ -219,7 +224,7 @@ public class Builder implements Plugin<Project> {
         return signedAPKPath
     }
 
-    String zipalignAPK(String signedAPKPath, String channelId) {
+    String execZipAlign(String unAlignedAPK, String channelId) {
         def targetPath
         if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
             targetPath = FileUtils.getFileAbsolutePath(outputPathSample)
@@ -228,18 +233,17 @@ public class Builder implements Plugin<Project> {
         } else {
             targetPath = FileUtils.getFileAbsolutePath(outputPathAll)
         }
-        def workDir = new File("builder", "exec").getAbsolutePath();
-        def zipalignString = getCommand()
         def alignedAPKPath = getOutputAPKPath(targetPath, channelId, "-final")
-//        zipalignString.append(" -f")
-//        zipalignString.append(" -v")
-        zipalignString.append(" 4 ")
-        zipalignString.append(signedAPKPath)
-        zipalignString.append(" ")
-        zipalignString.append(FileUtils.getFileAbsolutePath(alignedAPKPath))
-        String command = zipalignString.toString()
-        println "zipalign ==========" + command
-        exec(command, workDir)
+        mProject.exec(new Action<ExecSpec>() {
+            @Override
+            void execute(ExecSpec execSpec) {
+                execSpec.executable(getZipAlignExec())
+                execSpec.args("-f")
+                execSpec.args("4")
+                execSpec.args(unAlignedAPK)
+                execSpec.args(alignedAPKPath)
+            }
+        })
         return alignedAPKPath
     }
 
@@ -321,6 +325,17 @@ public class Builder implements Plugin<Project> {
         channelInfo.setChannelName(channelId)
         channelInfo.setInfo(packageInfo)
         return channelInfo
+    }
+
+    File getZipAlignExec() {
+        def android = mProject.extensions.getByType(AppExtension)
+        def buildToolsFile = new File("${android.getSdkDirectory()}", "build-tools")
+        def versionBuildTools = new File(buildToolsFile, "${android.getBuildToolsVersion()}")
+        def zipAlignFile = new File(versionBuildTools, "zipAlign")
+        if (zipAlignFile.exists()) {
+            return zipAlignFile
+        }
+        return null
     }
 
 }
