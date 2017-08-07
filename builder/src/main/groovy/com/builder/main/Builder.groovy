@@ -32,6 +32,7 @@ public class Builder implements Plugin<Project> {
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
     def final static String MAPPING_FILE_NAME = "gome.txt"
+    def final static String TEMP_DIR_NAME = "temp"
     def final static TASK_NAME = "buildAPK"
     def final static ENCODE_STR = "UTF-8"
 
@@ -39,8 +40,6 @@ public class Builder implements Plugin<Project> {
     def final static OS_MAC = "Mac OS X"
 
     Project project;
-
-
     def keyStorePropertiesPath
     def configBuildPath
     def channelListPath
@@ -63,6 +62,8 @@ public class Builder implements Plugin<Project> {
     @Override
     void apply(Project pro) {
         project = pro
+        /** 初始化插件 */
+        initPlugin();
         // 读取gradle中参数配置文件
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
@@ -126,8 +127,15 @@ public class Builder implements Plugin<Project> {
         }
     }
 
+    /** 插件初始化，用于初始化一些固定参数 */
+    void initPlugin() {
+        def tempDir = new File(project.buildDir, TEMP_DIR_NAME)
+        FileUtils.checkDirExistsIfCreate(tempDir.getAbsolutePath())
+        tempPath = tempDir.getAbsolutePath()
+    }
+
     /** 初始化task，检测必要参数 */
-    void initTask(Project project) {
+    void initTask() {
         // 参数文件位置初始化
         configBuildPath = project.buildConfig.configFilePath
         FileUtils.checkDirExistsIfCreate(configBuildPath)
@@ -234,7 +242,7 @@ public class Builder implements Plugin<Project> {
             targetPath = FileUtils.getFileAbsolutePath(outputPathAll)
         }
         def alignedAPKPath = getOutputAPKPath(targetPath, channelId, "-final")
-        mProject.exec(new Action<ExecSpec>() {
+        project.exec(new Action<ExecSpec>() {
             @Override
             void execute(ExecSpec execSpec) {
                 execSpec.executable(getZipAlignExec())
@@ -328,7 +336,7 @@ public class Builder implements Plugin<Project> {
     }
 
     File getZipAlignExec() {
-        def android = mProject.extensions.getByType(AppExtension)
+        def android = project.extensions.getByType(AppExtension)
         def buildToolsFile = new File("${android.getSdkDirectory()}", "build-tools")
         def versionBuildTools = new File(buildToolsFile, "${android.getBuildToolsVersion()}")
         def zipAlignFile = new File(versionBuildTools, "zipAlign")
