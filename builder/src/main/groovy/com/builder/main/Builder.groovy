@@ -70,7 +70,7 @@ public class Builder implements Plugin<Project> {
         project.task(TASK_NAME).doLast {
             println "end ex"
             /** 初始化task*/
-            initTask(project)
+            initTask()
             /** 加载sampleListList渠道号 */
             File sampleListFile = new File(sampleListPath)
             /** 加载channelList渠道号 */
