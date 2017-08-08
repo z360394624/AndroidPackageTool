@@ -50,7 +50,7 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.builder.main:builder:1.0.7'
+        classpath 'com.builder.main:builder:1.0.8'
     }
 }
 apply plugin: 'builder'
@@ -74,5 +74,6 @@ buildConfig {
     // 渠道列表channel + sample的apk输出路径
     outputPathA = "output/all/"
     // 线程数
-    threads = 1
+    threads = 3
 }
+tasks.build.finalizedBy(buildAPK)

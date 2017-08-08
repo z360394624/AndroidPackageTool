@@ -2,7 +2,6 @@ package com.builder.utils;
 
 public class FileUtils {
 
-
     static void writeFileStr(String filePath, String content) {
         File targetFile = new File(filePath)
         if (targetFile.exists()) targetFile.delete()
@@ -52,6 +51,20 @@ public class FileUtils {
             targetFile.getParentFile().delete()
         }
         targetFile.getParentFile().mkdirs()
+    }
+
+    static void copyFile(String source, String targetPath) {
+        def src = new File(source)
+        def dst = new File(targetPath)
+        dst << src.bytes
+    }
+
+    static void cleanDir(String dir) {
+        def file = new File(dir)
+        if (file.list().length > 0) {
+            file.deleteDir()
+            file.mkdirs()
+        }
     }
 
 }

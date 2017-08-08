@@ -1,7 +1,7 @@
 package com.builder.main
 
-import com.android.build.gradle.AppExtension
-import com.builder.BuildConfigPluginExtension
+import com.android.build.gradle.AppExtension;
+import com.builder.BuildConfigPluginExtension;
 import com.builder.bean.APKInfo
 import com.builder.bean.ChannelInfo
 import com.builder.bean.PackageInfo
@@ -66,12 +66,15 @@ public class Builder implements Plugin<Project> {
     def threads
     /** 多线程执行结果 */
     List<Future<String>> executorResult
-    String sourceAPKLock = "lock"
 
     /** 渠道包信息bean,用Collections.synchronizedList让list线程安全 */
     ArrayList<ChannelInfo> channelInfoList = Collections.synchronizedList(new ArrayList<ChannelInfo>())
     /** 渠道包映射文件，json格式 */
     APKInfo apkInfo = new APKInfo()
+
+//    Lock lock = new ReentrantLock();
+    boolean locked = true;
+
 
     @Override
     void apply(Project pro) {
@@ -81,7 +84,7 @@ public class Builder implements Plugin<Project> {
         /** 读取gradle中参数配置文件 */
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
-        project.task(TASK_NAME).doLast {
+        project.task(TASK_NAME).doFirst {
             /** 初始化task*/
             initTask()
             /** 加载sampleListList渠道号 */
@@ -102,6 +105,7 @@ public class Builder implements Plugin<Project> {
             List<List<String>> multiTreadList = ListUtils.splitList(targetList, threads)
             /** 最终线程数，因为可能出现设置的线程数>实际的渠道号组数，此时线程数应该为渠道号组数 */
             int threadSize = multiTreadList.size()
+            generateCacheFileForMultiThread(multiTreadList, sourceAPKPath)
             /** 建立线程池 */
             ExecutorService executorService = Executors.newFixedThreadPool(threadSize)
             for (childList in multiTreadList) {
@@ -110,33 +114,7 @@ public class Builder implements Plugin<Project> {
                     // 如果线程某组渠道号列表长度为0，不创建线程任务
                     continue
                 }
-//                Callable<String> task = new Callable<String>() {
-//                    @Override
-//                    String call() throws Exception {
-//                        for (channelId in childList) {
-//                            def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
-//                            // modify apk with channel id
-//                            def unsignedAPKPath
-//                            synchronized (sourceAPKPath) {
-//                                println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
-//                                unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
-//                            }
-//                            // sign apk
-//                            println "start sign apk"
-//                            def signedAPKPath = signAPK(unsignedAPKPath, channelId)
-//                            // zipalign apk
-//                            println "start zipalign apk"
-//                            def alignedAPKPath = execZipAlign(signedAPKPath, channelId)
-//                            // calculate apk file md5
-//                            println "start calculate apk md5"
-//                            def md5Str = generateApkMD5(alignedAPKPath, channelId)
-//
-//                            channelInfoList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
-//                        }
-//                        return "current thread handle size = ${channelInfoList.size()}"
-//                    }
-//                }
-//                executorResult.add(executorService.submit(task))
+                /** 打包方法 */
                 handleChildList(childList, executorService, executorResult)
             }
             /** 开始检测多线程任务是否完成 */
@@ -165,6 +143,10 @@ public class Builder implements Plugin<Project> {
                     FileUtils.writeFileStr(mappingFilePath, mappingFileContent)
                 }
             })
+            while (locked) {
+                // wait for thread
+            }
+
         }
     }
 
@@ -303,43 +285,32 @@ public class Builder implements Plugin<Project> {
         return alignedAPKPath
     }
 
-    void copy(byte[] buffer, InputStream input, OutputStream output) throws IOException {
-        int bytesRead;
-        while ((bytesRead = input.read(buffer)) != -1) {
-            output.write(buffer, 0, bytesRead);
-        }
-    }
-
     /** 写渠道号到apk */
     String writeChannelId(String apkPath, String targetPath, String channelId) {
-        println "targetPath ================= ${targetPath}"
-        def BUFFER = new byte[4096]
+        println "source apk path ==== ${apkPath} "
         def apk = new ZipFile(apkPath)
         def appended = new ZipOutputStream(new FileOutputStream(targetPath))
         Enumeration entries = apk.entries()
         while (entries.hasMoreElements()) {
-            println "2-1"
             ZipEntry e = entries.nextElement()
-            println "2-2"
             ZipEntry newEntry = new ZipEntry(e.getName())
-            println "2-3"
             appended.putNextEntry(newEntry)
-            println "2-4"
             if (!e.isDirectory()) {
-                copy(BUFFER, apk.getInputStream(e), appended)
+                copy(apk.getInputStream(e), appended)
             }
-            println "2-5"
         }
-        println "3"
-
         ZipEntry e = new ZipEntry("assets/channel.txt")
         appended.putNextEntry(e)
         appended.write(channelId.getBytes())
         appended.closeEntry()
         appended.close()
         apk.close()
-        println "targetPath===========================" + targetPath
         return targetPath
+    }
+
+    /** 流拷贝方法 */
+    void copy(InputStream input, OutputStream output) throws IOException {
+        output << input
     }
 
     /** 生成最终apk的md5 */
@@ -392,19 +363,19 @@ public class Builder implements Plugin<Project> {
         return null
     }
 
-    void handleChildList(List<String> childList, ExecutorService service, List<Future<String>> result) {
+    void handleChildList(
+            final List<String> childList,
+            final ExecutorService service, final List<Future<String>> result) {
         Callable<String> task = new Callable<String>() {
             @Override
             String call() throws Exception {
+                def threadAPKPath = threadMap.get(childList.get(0))
                 for (channelId in childList) {
+                    println "channelId ================ ${channelId}"
                     def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
                     // modify apk with channel id
-//                            new File(sourceAPKPath).
-                    def unsignedAPKPath
-                    synchronized (sourceAPKPath) {
-                        println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
-                        unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
-                    }
+                    println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
+                    def unsignedAPKPath = writeChannelId(threadAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
                     // sign apk
                     println "start sign apk"
                     def signedAPKPath = signAPK(unsignedAPKPath, channelId)
@@ -414,17 +385,35 @@ public class Builder implements Plugin<Project> {
                     // calculate apk file md5
                     println "start calculate apk md5"
                     def md5Str = generateApkMD5(alignedAPKPath, channelId)
-
                     channelInfoList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
                 }
                 return "current thread handle size = ${channelInfoList.size()}"
             }
         }
-        executorResult.add(service.submit(task))
+        Future<String> r = service.submit(task);
+        /** r.get()阻塞线程，保证线程正常运行 */
+//        println "execute result = ${r.get()}"
+        executorResult.add(r)
+    }
+
+    def threadMap = new HashMap<String, String>()
+
+    void generateCacheFileForMultiThread(List<List<String>> multiThreadChannelList, String sourceAPKPath) {
+        int size = multiThreadChannelList.size();
+        FileUtils.cleanDir(tempPath)
+        for (int i = 0; i < size; i++) {
+            if (multiThreadChannelList.get(i).size() > 0) {
+                def threadAPKName = "${APK_NAME_PREFIX}${i}${APK_NAME_SUFFIX}"
+                def targetPath = tempPath + File.separator + threadAPKName
+                FileUtils.copyFile(sourceAPKPath, targetPath)
+                threadMap.put(multiThreadChannelList.get(i).get(0), targetPath)
+            }
+        }
     }
 
     /** 每2s查询一次线程执行结果，如果有一个线程未执行完成就继续等待 */
     void packageTimeCount(Callback callback) {
+        println "开始执行打包线程检测"
         Timer timer = new Timer()
         timer.schedule(new TimerTask() {
             @Override
@@ -438,6 +427,8 @@ public class Builder implements Plugin<Project> {
                     }
                     if (finish) {
                         callback.onFinish()
+                        locked = false
+                        lock.unlock()
                         timer.cancel()
                     }
                 }
