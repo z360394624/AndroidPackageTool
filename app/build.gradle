@@ -13,12 +13,14 @@ android {
     }
     buildTypes {
         release {
+
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         releaseBatch.initWith(buildTypes.release)
         releaseBatch {
             signingConfig null
+            zipAlignEnabled true
         }
     }
     lintOptions {
@@ -45,14 +47,15 @@ buildscript {
 //            url uri('http://10.69.58.111:8081/repository/3rd_part/')
             url uri('../repo')
         }
+        jcenter()
     }
     dependencies {
-        classpath 'com.builder.main:builder:1.0.4'
+        classpath 'com.builder.main:builder:1.0.7'
     }
 }
 apply plugin: 'builder'
 buildConfig {
-    versionCode 900
+    versionCode 90
     buildType 'channel'
     // 已经打包的apk，未签名，未压缩
     sourceAPKPath "app/build/outputs/apk/app-releaseBatch-unsigned.apk"
@@ -70,4 +73,6 @@ buildConfig {
     outputPathS = "output/sample/"
     // 渠道列表channel + sample的apk输出路径
     outputPathA = "output/all/"
+    // 线程数
+    threads = 1
 }

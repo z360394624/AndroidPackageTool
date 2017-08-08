@@ -20,6 +20,8 @@ public class BuildConfigPluginExtension {
     def outputPathS = "output/sample/"
     def outputPathA = "output/all/"
 
+    def threads = 1
+
 
 
 }

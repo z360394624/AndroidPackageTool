@@ -6,8 +6,10 @@ import com.builder.bean.APKInfo
 import com.builder.bean.ChannelInfo
 import com.builder.bean.PackageInfo
 import com.builder.bean.VersionInfo
+import com.builder.utils.Callback
 import com.builder.utils.ConfigUtil
 import com.builder.utils.FileUtils
+import com.builder.utils.ListUtils
 import com.builder.utils.MD5Util
 import groovy.json.JsonOutput
 import org.gradle.api.Action
@@ -15,6 +17,10 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.process.ExecSpec
 
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -36,9 +42,6 @@ public class Builder implements Plugin<Project> {
     def final static TASK_NAME = "buildAPK"
     def final static ENCODE_STR = "UTF-8"
 
-    def final static OS_LINUX = "Linux"
-    def final static OS_MAC = "Mac OS X"
-
     Project project;
     def keyStorePropertiesPath
     def configBuildPath
@@ -46,17 +49,28 @@ public class Builder implements Plugin<Project> {
     def sampleListPath
     def sourceAPKPath
     def tempPath
+    /** apk最终输出路径,根据打包类型不同，有3类 */
     def outputPathChannel
     def outputPathSample
     def outputPathAll
+    /** 版本号 */
     def versionCode
+    /** 操作系统类型 */
     def osName
+    /** 打包类型：channel->channel.txt ;  sample->sample.txt ; all-> sample.txt+channel.txt */
+    def buildType
     def channelList = []
     def sampleList = []
     def totalList = []
-    def buildType
+    /** 线程数 */
+    def threads
+    /** 多线程执行结果 */
+    List<Future<String>> executorResult
+    String sourceAPKLock = "lock"
 
-
+    /** 渠道包信息bean,用Collections.synchronizedList让list线程安全 */
+    ArrayList<ChannelInfo> channelInfoList = Collections.synchronizedList(new ArrayList<ChannelInfo>())
+    /** 渠道包映射文件，json格式 */
     APKInfo apkInfo = new APKInfo()
 
     @Override
@@ -64,11 +78,10 @@ public class Builder implements Plugin<Project> {
         project = pro
         /** 初始化插件 */
         initPlugin();
-        // 读取gradle中参数配置文件
+        /** 读取gradle中参数配置文件 */
         project.extensions.create("buildConfig", BuildConfigPluginExtension)
         /** 创建打包的task */
         project.task(TASK_NAME).doLast {
-            println "end ex"
             /** 初始化task*/
             initTask()
             /** 加载sampleListList渠道号 */
@@ -85,45 +98,73 @@ public class Builder implements Plugin<Project> {
             }
             /** 获取目标打包列表 */
             def targetList = getTargetChannelList()
-            // 渠道包信息bean
-            ArrayList channelList = new ArrayList()
-            for (channelId in targetList) {
-                println "start handle channelId " + channelId + ">>>>>>>>>>>>>>>>>>>>>"
-                def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
-                // modify apk with channel id
-                println "start write channel id"
-                def unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
-                // sign apk
-                println "start sign apk"
-                def signedAPKPath = signAPK(unsignedAPKPath, channelId)
-                // zipalign apk
-                println "start zipalign apk"
-                def alignedAPKPath = execZipAlign(signedAPKPath, channelId)
-                // calculate apk file md5
-                println "start calculate apk md5"
-                def md5Str = generateApkMD5(alignedAPKPath, channelId)
-
-                channelList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
+            /** 渠道号列表根据线程数分组 */
+            List<List<String>> multiTreadList = ListUtils.splitList(targetList, threads)
+            /** 最终线程数，因为可能出现设置的线程数>实际的渠道号组数，此时线程数应该为渠道号组数 */
+            int threadSize = multiTreadList.size()
+            /** 建立线程池 */
+            ExecutorService executorService = Executors.newFixedThreadPool(threadSize)
+            for (childList in multiTreadList) {
+                println "childList =============== " + childList
+                if (childList.size() == 0) {
+                    // 如果线程某组渠道号列表长度为0，不创建线程任务
+                    continue
+                }
+//                Callable<String> task = new Callable<String>() {
+//                    @Override
+//                    String call() throws Exception {
+//                        for (channelId in childList) {
+//                            def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
+//                            // modify apk with channel id
+//                            def unsignedAPKPath
+//                            synchronized (sourceAPKPath) {
+//                                println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
+//                                unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
+//                            }
+//                            // sign apk
+//                            println "start sign apk"
+//                            def signedAPKPath = signAPK(unsignedAPKPath, channelId)
+//                            // zipalign apk
+//                            println "start zipalign apk"
+//                            def alignedAPKPath = execZipAlign(signedAPKPath, channelId)
+//                            // calculate apk file md5
+//                            println "start calculate apk md5"
+//                            def md5Str = generateApkMD5(alignedAPKPath, channelId)
+//
+//                            channelInfoList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
+//                        }
+//                        return "current thread handle size = ${channelInfoList.size()}"
+//                    }
+//                }
+//                executorResult.add(executorService.submit(task))
+                handleChildList(childList, executorService, executorResult)
             }
-            VersionInfo versionInfo = new VersionInfo()
-            versionInfo.setVersionCode("${versionCode}")
-            versionInfo.setChannelList(channelList)
+            /** 开始检测多线程任务是否完成 */
+            packageTimeCount(new Callback() {
+                @Override
+                void onFinish() {
+                    println "当前线程数 ：" + executorResult.size()
+                    VersionInfo versionInfo = new VersionInfo()
+                    versionInfo.setVersionCode("${versionCode}")
+                    versionInfo.setChannelList(channelInfoList)
 
-            ArrayList versionList = new ArrayList()
-            versionList.add(versionInfo)
-            apkInfo.setVersion("${versionCode}")
-            apkInfo.setVersionList(versionList)
-            def mappingFilePath
-            if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
-                mappingFilePath = outputPathSample + File.separator + MAPPING_FILE_NAME
-            } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
-                mappingFilePath = outputPathChannel + File.separator + MAPPING_FILE_NAME
-            } else {
-                mappingFilePath = outputPathAll + File.separator + MAPPING_FILE_NAME
-            }
-            println "mappingFilePath >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> " + mappingFilePath
-            def mappingFileContent = new JsonOutput().toJson(apkInfo)
-            FileUtils.writeFileStr(mappingFilePath, mappingFileContent)
+                    ArrayList versionList = new ArrayList()
+                    versionList.add(versionInfo)
+                    apkInfo.setVersion("${versionCode}")
+                    apkInfo.setVersionList(versionList)
+                    def mappingFilePath
+                    if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
+                        mappingFilePath = outputPathSample + File.separator + MAPPING_FILE_NAME
+                    } else if (buildType == BuildConfigPluginExtension.BUILT_TYPE_CHANNEL) {
+                        mappingFilePath = outputPathChannel + File.separator + MAPPING_FILE_NAME
+                    } else {
+                        mappingFilePath = outputPathAll + File.separator + MAPPING_FILE_NAME
+                    }
+                    println "mappingFilePath >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> " + mappingFilePath
+                    def mappingFileContent = new JsonOutput().toJson(apkInfo)
+                    FileUtils.writeFileStr(mappingFilePath, mappingFileContent)
+                }
+            })
         }
     }
 
@@ -175,6 +216,10 @@ public class Builder implements Plugin<Project> {
         buildType = project.buildConfig.buildType
         /** 读取当前操作系统类型 */
         osName = System.getProperty("os.name")
+        /** 设置打包线程数 */
+        threads = project.buildConfig.threads
+        /** 初始化多线程执行结果集合 */
+        executorResult = new ArrayList<>()
         println "=============================================="
         println "keyStore配置路径>>>" + keyStorePropertiesPath
         println "源apk路径>>>" + sourceAPKPath
@@ -186,10 +231,11 @@ public class Builder implements Plugin<Project> {
         println "outputPathChannel>>>>>>" + outputPathChannel
         println "outputPathSample>>>>>>" + outputPathSample
         println "outputPathAll>>>>>>" + outputPathAll
+        println "预设线程数>>>>>>" + threads
         println "=============================================="
     }
 
-    /** 根据打包类型 */
+    /** 根据打包类型，决定读取那个渠道列表 */
     List getTargetChannelList() {
         if (buildType == BuildConfigPluginExtension.BUILT_TYPE_ALL) {
             return totalList
@@ -202,6 +248,7 @@ public class Builder implements Plugin<Project> {
         }
     }
 
+    /** 签名apk */
     String signAPK(String unsignedAPKPath, String channelId) {
         //读取签名配置文件
         def properties = ConfigUtil.getPropertiesFile(keyStorePropertiesPath)
@@ -232,6 +279,7 @@ public class Builder implements Plugin<Project> {
         return signedAPKPath
     }
 
+    /**  对apk执行zipAlign */
     String execZipAlign(String unAlignedAPK, String channelId) {
         def targetPath
         if (buildType == BuildConfigPluginExtension.BUILT_TYPE_SAMPLE) {
@@ -262,19 +310,27 @@ public class Builder implements Plugin<Project> {
         }
     }
 
+    /** 写渠道号到apk */
     String writeChannelId(String apkPath, String targetPath, String channelId) {
+        println "targetPath ================= ${targetPath}"
         def BUFFER = new byte[4096]
         def apk = new ZipFile(apkPath)
         def appended = new ZipOutputStream(new FileOutputStream(targetPath))
         Enumeration entries = apk.entries()
         while (entries.hasMoreElements()) {
+            println "2-1"
             ZipEntry e = entries.nextElement()
+            println "2-2"
             ZipEntry newEntry = new ZipEntry(e.getName())
+            println "2-3"
             appended.putNextEntry(newEntry)
+            println "2-4"
             if (!e.isDirectory()) {
                 copy(BUFFER, apk.getInputStream(e), appended)
             }
+            println "2-5"
         }
+        println "3"
 
         ZipEntry e = new ZipEntry("assets/channel.txt")
         appended.putNextEntry(e)
@@ -282,9 +338,11 @@ public class Builder implements Plugin<Project> {
         appended.closeEntry()
         appended.close()
         apk.close()
+        println "targetPath===========================" + targetPath
         return targetPath
     }
 
+    /** 生成最终apk的md5 */
     String generateApkMD5(String signedAPKPath, String channelId) {
         File signedAPK = new File(signedAPKPath)
         File md5File = new File(signedAPK.getParentFile(), APK_NAME_PREFIX + channelId + MD5_NAME_SUFFIX)
@@ -304,19 +362,6 @@ public class Builder implements Plugin<Project> {
         println serr
     }
 
-    StringBuffer getCommand() {
-        def command;
-        if (osName.startsWith(OS_LINUX)) {
-            command = new StringBuffer("./zipalign-linux")
-        } else if (osName.startsWith(OS_MAC)) {
-            command = new StringBuffer("./zipalign-mac")
-        } else {
-            command = new StringBuffer("builder/exec/zipalign.exe")
-        }
-        return command
-    }
-
-
     String getOutputAPKPath(String pathPrefix, String channelId, String subfix) {
         def targetFile = new File(pathPrefix + File.separator + channelId + File.separator)
         if (!targetFile.exists()) {
@@ -335,6 +380,7 @@ public class Builder implements Plugin<Project> {
         return channelInfo
     }
 
+    /** 获取android sdk中buildTools中的zipLAign工具路径 */
     File getZipAlignExec() {
         def android = project.extensions.getByType(AppExtension)
         def buildToolsFile = new File("${android.getSdkDirectory()}", "build-tools")
@@ -344,6 +390,59 @@ public class Builder implements Plugin<Project> {
             return zipAlignFile
         }
         return null
+    }
+
+    void handleChildList(List<String> childList, ExecutorService service, List<Future<String>> result) {
+        Callable<String> task = new Callable<String>() {
+            @Override
+            String call() throws Exception {
+                for (channelId in childList) {
+                    def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
+                    // modify apk with channel id
+//                            new File(sourceAPKPath).
+                    def unsignedAPKPath
+                    synchronized (sourceAPKPath) {
+                        println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
+                        unsignedAPKPath = writeChannelId(sourceAPKPath, tempPath + File.separator + sourceAPKWithChannelId, channelId)
+                    }
+                    // sign apk
+                    println "start sign apk"
+                    def signedAPKPath = signAPK(unsignedAPKPath, channelId)
+                    // zipalign apk
+                    println "start zipalign apk"
+                    def alignedAPKPath = execZipAlign(signedAPKPath, channelId)
+                    // calculate apk file md5
+                    println "start calculate apk md5"
+                    def md5Str = generateApkMD5(alignedAPKPath, channelId)
+
+                    channelInfoList.add(generateChannelInfo(alignedAPKPath, "${versionCode}", channelId, md5Str))
+                }
+                return "current thread handle size = ${channelInfoList.size()}"
+            }
+        }
+        executorResult.add(service.submit(task))
+    }
+
+    /** 每2s查询一次线程执行结果，如果有一个线程未执行完成就继续等待 */
+    void packageTimeCount(Callback callback) {
+        Timer timer = new Timer()
+        timer.schedule(new TimerTask() {
+            @Override
+            void run() {
+                boolean finish = false
+                for (result in executorResult) {
+                    if (!result.isDone()) {
+                        break
+                    } else {
+                        finish = true
+                    }
+                    if (finish) {
+                        callback.onFinish()
+                        timer.cancel()
+                    }
+                }
+            }
+        }, 1000, 2000)
     }
 
 }
