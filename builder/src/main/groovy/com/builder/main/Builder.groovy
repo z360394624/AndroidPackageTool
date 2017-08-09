@@ -66,13 +66,11 @@ public class Builder implements Plugin<Project> {
     def threads
     /** 多线程执行结果 */
     List<Future<String>> executorResult
-
     /** 渠道包信息bean,用Collections.synchronizedList让list线程安全 */
     ArrayList<ChannelInfo> channelInfoList = Collections.synchronizedList(new ArrayList<ChannelInfo>())
     /** 渠道包映射文件，json格式 */
     APKInfo apkInfo = new APKInfo()
-
-//    Lock lock = new ReentrantLock();
+    // 防止task在运行结束后销毁所有子线程
     boolean locked = true;
 
 
@@ -109,7 +107,6 @@ public class Builder implements Plugin<Project> {
             /** 建立线程池 */
             ExecutorService executorService = Executors.newFixedThreadPool(threadSize)
             for (childList in multiTreadList) {
-                println "childList =============== " + childList
                 if (childList.size() == 0) {
                     // 如果线程某组渠道号列表长度为0，不创建线程任务
                     continue
@@ -241,7 +238,6 @@ public class Builder implements Plugin<Project> {
         if (!FileUtils.checkFileExists(keyStorePath)) {
             throw new FileNotFoundException("keyStore not found")
         }
-        println "keyStorePath = " + keyStorePath + ";" + "keyStorePassword = " + keyStorePassword + ";" + "aliasName = " + aliasName + ";" + "aliasPassword = " + aliasPassword + ";"
         def signedAPKPath = FileUtils.getFileAbsolutePath(tempPath) + File.separator + APK_NAME_PREFIX + channelId + "-" + "signed" + APK_NAME_SUFFIX
         def signCommand = new StringBuffer("jarsigner -keystore ")
         signCommand.append(keyStorePath)
@@ -356,7 +352,7 @@ public class Builder implements Plugin<Project> {
         def android = project.extensions.getByType(AppExtension)
         def buildToolsFile = new File("${android.getSdkDirectory()}", "build-tools")
         def versionBuildTools = new File(buildToolsFile, "${android.getBuildToolsVersion()}")
-        def zipAlignFile = new File(versionBuildTools, "zipAlign")
+        def zipAlignFile = new File(versionBuildTools, "zipalign")
         if (zipAlignFile.exists()) {
             return zipAlignFile
         }
@@ -371,7 +367,6 @@ public class Builder implements Plugin<Project> {
             String call() throws Exception {
                 def threadAPKPath = threadMap.get(childList.get(0))
                 for (channelId in childList) {
-                    println "channelId ================ ${channelId}"
                     def sourceAPKWithChannelId = APK_NAME_PREFIX + channelId + APK_NAME_SUFFIX
                     // modify apk with channel id
                     println "start write channel id: " + channelId + ", apk file exists:${FileUtils.checkFileExists(sourceAPKPath)}"
@@ -391,9 +386,7 @@ public class Builder implements Plugin<Project> {
             }
         }
         Future<String> r = service.submit(task);
-        /** r.get()阻塞线程，保证线程正常运行 */
-//        println "execute result = ${r.get()}"
-        executorResult.add(r)
+        result.add(r)
     }
 
     def threadMap = new HashMap<String, String>()
