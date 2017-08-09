@@ -428,7 +428,6 @@ public class Builder implements Plugin<Project> {
                     if (finish) {
                         callback.onFinish()
                         locked = false
-                        lock.unlock()
                         timer.cancel()
                     }
                 }
