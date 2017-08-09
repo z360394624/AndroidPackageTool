@@ -50,7 +50,7 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.builder.main:builder:1.0.8'
+        classpath 'com.builder.main:builder:1.0.7'
     }
 }
 apply plugin: 'builder'
