@@ -34,6 +34,7 @@ public class Builder implements Plugin<Project> {
             "${BuildConfigPluginExtension.BUILT_TYPE_SAMPLE}、" +
             "${BuildConfigPluginExtension.BUILT_TYPE_CHANNEL}"
 
+    def final static String ASSETS_CHANNEL_ID = "assets/channel.txt"
     def final static String APK_NAME_PREFIX = "GomePlus-"
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
@@ -289,15 +290,19 @@ public class Builder implements Plugin<Project> {
         Enumeration entries = apk.entries()
         while (entries.hasMoreElements()) {
             ZipEntry e = entries.nextElement()
-            ZipEntry newEntry = new ZipEntry(e.getName())
-            appended.putNextEntry(newEntry)
-            if (!e.isDirectory()) {
-                copy(apk.getInputStream(e), appended)
+            if (e.getName() == ASSETS_CHANNEL_ID) {
+                ZipEntry channelFile = new ZipEntry(ASSETS_CHANNEL_ID)
+                appended.putNextEntry(channelFile)
+                appended.write(channelId.getBytes())
+            } else {
+                ZipEntry newEntry = new ZipEntry(e.getName())
+                appended.putNextEntry(newEntry)
+                if (!e.isDirectory()) {
+                    copy(apk.getInputStream(e), appended)
+                }
             }
+
         }
-        ZipEntry e = new ZipEntry("assets/channel.txt")
-        appended.putNextEntry(e)
-        appended.write(channelId.getBytes())
         appended.closeEntry()
         appended.close()
         apk.close()
