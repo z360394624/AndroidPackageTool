@@ -35,13 +35,18 @@ public class Builder implements Plugin<Project> {
             "${BuildConfigPluginExtension.BUILT_TYPE_CHANNEL}"
 
     def final static String ASSETS_CHANNEL_ID = "assets/channel.txt"
-    def final static String APK_NAME_PREFIX = "GomePlus-"
+    def final static String APK_NAME_PREFIX = "APP-"
     def final static String APK_NAME_SUFFIX = ".apk"
     def final static String MD5_NAME_SUFFIX = ".md5"
     def final static String MAPPING_FILE_NAME = "gome.txt"
     def final static String TEMP_DIR_NAME = "temp"
     def final static TASK_NAME = "buildAPK"
     def final static ENCODE_STR = "UTF-8"
+    def final static String WINDOWS_ZIPALIGN = "zipalign.exe"
+    def final static String UNIX_ZIPALIGN = "zipalign"
+    def final static String OS_TYPE_MAC = "Mac"
+    def final static String OS_TYPE_LINUX = "Linux"
+    def final static String OS_TYPE_WINDOWS = "Windows"
 
     Project project;
     def keyStorePropertiesPath
@@ -357,11 +362,25 @@ public class Builder implements Plugin<Project> {
         def android = project.extensions.getByType(AppExtension)
         def buildToolsFile = new File("${android.getSdkDirectory()}", "build-tools")
         def versionBuildTools = new File(buildToolsFile, "${android.getBuildToolsVersion()}")
-        def zipAlignFile = new File(versionBuildTools, "zipalign")
+        def zipAlignFile = new File(versionBuildTools, zipAlign(osName))
         if (zipAlignFile.exists()) {
+            println zipAlignFile.getAbsolutePath()
             return zipAlignFile
+        } else {
+            println zipAlignFile.getAbsolutePath()
+            println "zipAlignFile not found"
         }
         return null
+    }
+
+    String zipAlign(String osType) {
+        if (osType.startsWith(OS_TYPE_LINUX) || osType.startsWith(OS_TYPE_MAC)) {
+            return UNIX_ZIPALIGN;
+        } else if (osType.startsWith(OS_TYPE_WINDOWS)) {
+            return WINDOWS_ZIPALIGN;
+        } else {
+            return UNIX_ZIPALIGN;
+        }
     }
 
     void handleChildList(
